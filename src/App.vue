@@ -15,7 +15,13 @@
       <!-- End of Add Idea -->
 
       <!-- Idea item -->
-      <AppIdea v-for="(idea, $index) in ideas" :key="$index" :idea="idea" />
+      <AppIdea
+        v-for="(idea, $index) in ideas"
+        :key="$index"
+        :idea="idea"
+        :user="user"
+        @vote-idea="voteIdea"
+      />
       <!-- End of Idea item -->
     </div>
     <!-- End of main box -->
@@ -35,26 +41,47 @@ export default {
 
     let user = ref(null);
 
-    auth.onAuthStateChanged(async (auth) => (user.value = auth ? auth : null));
-
-    db.collection("ideas").onSnapshot(
-      (snapshot) => {
-        const newIdeas = [];
-        snapshot.docs.forEach((doc) => {
-          let { name, user, userName, votes } = doc.data();
-          let id = doc.id;
-          newIdeas.push({
-            name,
-            user,
-            userName,
-            votes,
-            id,
+    auth.onAuthStateChanged(async (auth) => {
+      let userVotes;
+      if (auth) {
+        user.value = auth;
+        userVotes = db
+          .collection("votes")
+          .doc(user.value.uid)
+          .onSnapshot((doc) => {
+            if (doc.exists) {
+              let document = doc.data();
+              if ("ideas" in document) {
+                user.value.votes = document.ideas;
+              }
+            }
           });
-        });
-        ideas.value = newIdeas;
-      },
-      (error) => console.error(error)
-    );
+      } else {
+        user.value = null;
+        userVotes && userVotes();
+      }
+    });
+
+    db.collection("ideas")
+      .orderBy("votes", "desc")
+      .onSnapshot(
+        (snapshot) => {
+          const newIdeas = [];
+          snapshot.docs.forEach((doc) => {
+            let { name, user, userName, votes } = doc.data();
+            let id = doc.id;
+            newIdeas.push({
+              name,
+              user,
+              userName,
+              votes,
+              id,
+            });
+          });
+          ideas.value = newIdeas;
+        },
+        (error) => console.error(error)
+      );
 
     const doLogin = async () => {
       const provider = new firebase.auth.GoogleAuthProvider();
@@ -86,7 +113,38 @@ export default {
       }
     };
 
-    return { ideas, user, doLogin, doLogout, addIdea };
+    const voteIdea = async ({ id, type }) => {
+      try {
+        let votes = await db.collection("votes").doc("user.value.uid").get();
+
+        if (votes.exists) {
+          votes = votes.data().ideas;
+          if (votes.find((vote) => vote === id)) {
+            throw new Error("User already voted!");
+          }
+        }
+        await db
+          .collection("ideas")
+          .doc(id)
+          .update({
+            votes: firebase.firestore.FieldValue.increment(type ? 1 : -1),
+          });
+
+        await db
+          .collection("votes")
+          .doc(user.value.uid)
+          .set(
+            {
+              ideas: firebase.firestore.FieldValue.arrayUnion(id),
+            },
+            { merge: true }
+          );
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    return { ideas, user, doLogin, doLogout, addIdea, voteIdea };
   },
   components: {
     AppIdea,

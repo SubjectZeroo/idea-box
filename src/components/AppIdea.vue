@@ -25,13 +25,15 @@
       "
     >
       <h3 class="text-3xl font-bold text-center">{{ idea.votes }}</h3>
-      <nav class="flex justify-center sm:block">
+      <nav v-if="user && !userVoted" class="flex justify-center sm:block">
         <img
+          @click="voteIdea(true)"
           class="w-10 cursor-pointer"
           src="@/assets/img/arrow.svg"
           alt="Vote up"
         />
         <img
+          @click="voteIdea(false)"
           class="w-10 cursor-pointer transform rotate-180"
           src="@/assets/img/arrow.svg"
           alt="Vote down"
@@ -42,13 +44,28 @@
 </template>
 
 <script>
+import { computed } from "vue";
 export default {
   name: "AppIdea",
+  emits: ["vote-idea"],
   props: {
     idea: {
       type: Object,
       required: true,
     },
+    user: {
+      type: [Object, null],
+    },
+  },
+  setup(props, { emit }) {
+    const voteIdea = (type) => emit("vote-idea", { type, id: props.idea.id });
+    // eslint-disable-next-line vue/return-in-computed-property
+    const userVoted = computed(() => {
+      if (props.user.votes) {
+        return props.user.votes.find((item) => item === props.idea.id);
+      }
+    });
+    return { voteIdea, userVoted };
   },
 };
 </script>
