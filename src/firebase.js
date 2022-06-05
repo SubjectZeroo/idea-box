@@ -3,9 +3,10 @@ import firebase from "firebase/app";
 import "firebase/auth";
 import "firebase/firestore";
 
+
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyCKEOwni-tOPmAl5pu5BtUF4Fc4Qt6Okk4",
+  apiKey: process.env.VUE_APP_API_KEY,
   authDomain: "ideadboxlive.firebaseapp.com",
   projectId: "ideadboxlive",
   storageBucket: "ideadboxlive.appspot.com",

@@ -1,11 +1,22 @@
 <template>
   <!-- Main container -->
   <div class="container mx-auto p-4">
+    <!-- Remove idea modal -->
+    <teleport to="body">
+      <RemoveIdea
+        v-if="isModalActive"
+        :name="ideaToRemove.name"
+        @remove-ok="removeIdea"
+        @remove-cancel="isModalActive = !isModalActive"
+      />
+    </teleport>
+
     <!-- Main box -->
     <div class="w-full bg-gray-100 shadow-lg p-4 rounded-lg">
       <h1 class="mb-5 text-4xl text-center">IdeaBox</h1>
 
       <!-- Add Idea -->
+
       <AddIdea
         :user="user"
         @do-login="doLogin"
@@ -15,13 +26,18 @@
       <!-- End of Add Idea -->
 
       <!-- Idea item -->
-      <AppIdea
-        v-for="(idea, $index) in ideas"
-        :key="$index"
-        :idea="idea"
-        :user="user"
-        @vote-idea="voteIdea"
-      />
+      <transition-group name="list-complete">
+        <AppIdea
+          v-for="idea in ideas"
+          :key="idea.createdAt"
+          :idea="idea"
+          :user="user"
+          @vote-idea="voteIdea"
+          @remove-idea="showRemoveIdeaModal"
+          class="idea"
+        />
+      </transition-group>
+
       <!-- End of Idea item -->
     </div>
     <!-- End of main box -->
@@ -31,18 +47,47 @@
 <script>
 import AppIdea from "@/components/AppIdea.vue";
 // import seed from "@/seed.json";
-import { ref } from "vue";
+import { ref, defineAsyncComponent } from "vue";
 import { auth, db, firebase } from "@/firebase";
 import AddIdea from "./components/AddIdea.vue";
+
+const RemoveIdea = defineAsyncComponent(() =>
+  import("@/components/RemoveIdea")
+);
 export default {
   name: "App",
   setup() {
+    //User
+
+    const isModalActive = ref(false);
+
+    let ideaToRemove = {};
+
+    const doLogin = async () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+
+      try {
+        await auth.signInWithPopup(provider);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    const doLogout = async () => {
+      try {
+        await auth.signOut();
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
     const ideas = ref([]);
 
     let user = ref(null);
 
     auth.onAuthStateChanged(async (auth) => {
       let userVotes;
+
       if (auth) {
         user.value = auth;
         userVotes = db
@@ -68,12 +113,13 @@ export default {
         (snapshot) => {
           const newIdeas = [];
           snapshot.docs.forEach((doc) => {
-            let { name, user, userName, votes } = doc.data();
+            let { name, user, userName, votes, createdAt } = doc.data();
             let id = doc.id;
             newIdeas.push({
               name,
               user,
               userName,
+              createdAt,
               votes,
               id,
             });
@@ -83,29 +129,13 @@ export default {
         (error) => console.error(error)
       );
 
-    const doLogin = async () => {
-      const provider = new firebase.auth.GoogleAuthProvider();
-
-      try {
-        await auth.signInWithPopup(provider);
-      } catch (error) {
-        console.error(error);
-      }
-    };
-
-    const doLogout = async () => {
-      try {
-        await auth.signOut();
-      } catch (error) {
-        console.error(error);
-      }
-    };
     const addIdea = async (data) => {
       try {
         await db.collection("ideas").add({
           name: data.value,
           user: user.value.uid,
           userName: user.value.displayName,
+          createdAt: Date.now(),
           votes: 0,
         });
       } catch (error) {
@@ -144,17 +174,77 @@ export default {
       }
     };
 
-    return { ideas, user, doLogin, doLogout, addIdea, voteIdea };
+    const showRemoveIdeaModal = ({ name, id }) => {
+      ideaToRemove.name = name;
+      ideaToRemove.id = id;
+      isModalActive.value = true;
+    };
+
+    const removeIdea = async () => {
+      try {
+        await db.collection("ideas").doc(ideaToRemove.id).delete();
+        ideaToRemove = {};
+        isModalActive.value = false;
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    return {
+      ideas,
+      user,
+      doLogin,
+      doLogout,
+      addIdea,
+      voteIdea,
+      isModalActive,
+      ideaToRemove,
+      showRemoveIdeaModal,
+      removeIdea,
+    };
   },
   components: {
     AppIdea,
-
     AddIdea,
+    RemoveIdea,
   },
 };
 </script>
 
 <style>
+.list-complete-enter-from,
+.list-complete-leave-to {
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+.list-complete-leave-active {
+  position: absolute;
+}
+
+.list-complete-move {
+  transition: transform 0.3s ease;
+}
+
+.idea {
+  @apply bg-gray-200;
+}
+
+.idea:nth-of-type(1) {
+  @apply bg-red-500;
+}
+.idea:nth-of-type(2) {
+  @apply bg-red-400;
+}
+.idea:nth-of-type(3) {
+  @apply bg-red-300;
+}
+.idea:nth-of-type(4) {
+  @apply bg-red-200;
+}
+.idea:nth-of-type(5) {
+  @apply bg-red-100;
+}
 .user-actions {
   @apply mt-2 text-center;
 }
@@ -162,5 +252,9 @@ export default {
 .user-actions a {
   font-weight: bold;
   text-decoration: underline;
+}
+
+.idea {
+  transition: all 0.8s ease;
 }
 </style>
